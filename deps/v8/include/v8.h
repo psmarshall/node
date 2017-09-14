@@ -6273,8 +6273,22 @@ typedef void (*FailedAccessCheckCallback)(Local<Object> target,
  */
 typedef bool (*DeprecatedAllowCodeGenerationFromStringsCallback)(
     Local<Context> context);
-typedef bool (*AllowCodeGenerationFromStringsCallback)(Local<Context> context,
-                                                       Local<String> source);
+// The naming of this alias is for **Node v8.x releases only**
+// plain V8 >= 6.1 just calls it AllowCodeGenerationFromStringsCallback
+typedef bool (*FreshNewAllowCodeGenerationFromStringsCallback)(
+    Local<Context> context, Local<String> source);
+
+// a) no addon uses this anyway
+// b) this is sufficient because c++ type mangling takes care of resolving
+//    the typedefs
+// c) doing it this way allows people to use the Fresh New variant
+#ifdef USING_V8_SHARED
+typedef DeprecatedAllowCodeGenerationFromStringsCallback
+    AllowCodeGenerationFromStringsCallback;
+#else
+typedef FreshNewAllowCodeGenerationFromStringsCallback
+    AllowCodeGenerationFromStringsCallback;
+#endif
 
 // --- WebAssembly compilation callbacks ---
 typedef bool (*ExtensionCallback)(const FunctionCallbackInfo<Value>&);
@@ -7550,7 +7564,7 @@ class V8_EXPORT Isolate {
    * strings should be allowed.
    */
   void SetAllowCodeGenerationFromStringsCallback(
-      AllowCodeGenerationFromStringsCallback callback);
+      FreshNewAllowCodeGenerationFromStringsCallback callback);
   V8_DEPRECATED("Use callback with source parameter.",
                 void SetAllowCodeGenerationFromStringsCallback(
                     DeprecatedAllowCodeGenerationFromStringsCallback callback));
@@ -10200,7 +10214,8 @@ void V8::SetAllowCodeGenerationFromStringsCallback(
     DeprecatedAllowCodeGenerationFromStringsCallback callback) {
   Isolate* isolate = Isolate::GetCurrent();
   isolate->SetAllowCodeGenerationFromStringsCallback(
-      reinterpret_cast<AllowCodeGenerationFromStringsCallback>(callback));
+      reinterpret_cast<FreshNewAllowCodeGenerationFromStringsCallback>(
+          callback));
 }
 
 
