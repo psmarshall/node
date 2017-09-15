@@ -4295,18 +4295,7 @@ class V8_EXPORT ArrayBuffer : public Object {
    */
   class V8_EXPORT Contents { // NOLINT
    public:
-    Contents()
-        : data_(nullptr),
-          byte_length_(0),
-          allocation_base_(nullptr),
-          allocation_length_(0),
-          allocation_mode_(Allocator::AllocationMode::kNormal) {}
-
-    void* AllocationBase() const { return allocation_base_; }
-    size_t AllocationLength() const { return allocation_length_; }
-    Allocator::AllocationMode AllocationMode() const {
-      return allocation_mode_;
-    }
+    Contents() : data_(NULL), byte_length_(0) {}
 
     void* Data() const { return data_; }
     size_t ByteLength() const { return byte_length_; }
@@ -4314,9 +4303,6 @@ class V8_EXPORT ArrayBuffer : public Object {
    private:
     void* data_;
     size_t byte_length_;
-    void* allocation_base_;
-    size_t allocation_length_;
-    Allocator::AllocationMode allocation_mode_;
 
     friend class ArrayBuffer;
   };
@@ -4665,18 +4651,7 @@ class V8_EXPORT SharedArrayBuffer : public Object {
    */
   class V8_EXPORT Contents {  // NOLINT
    public:
-    Contents()
-        : data_(nullptr),
-          byte_length_(0),
-          allocation_base_(nullptr),
-          allocation_length_(0),
-          allocation_mode_(ArrayBuffer::Allocator::AllocationMode::kNormal) {}
-
-    void* AllocationBase() const { return allocation_base_; }
-    size_t AllocationLength() const { return allocation_length_; }
-    ArrayBuffer::Allocator::AllocationMode AllocationMode() const {
-      return allocation_mode_;
-    }
+    Contents() : data_(NULL), byte_length_(0) {}
 
     void* Data() const { return data_; }
     size_t ByteLength() const { return byte_length_; }
@@ -4684,9 +4659,6 @@ class V8_EXPORT SharedArrayBuffer : public Object {
    private:
     void* data_;
     size_t byte_length_;
-    void* allocation_base_;
-    size_t allocation_length_;
-    ArrayBuffer::Allocator::AllocationMode allocation_mode_;
 
     friend class SharedArrayBuffer;
   };
@@ -8046,7 +8018,7 @@ class V8_EXPORT V8 {
    */
   static void ShutdownPlatform();
 
-#if V8_OS_POSIX
+#if V8_OS_LINUX && V8_TARGET_ARCH_X64 && !V8_OS_ANDROID
   /**
    * Give the V8 signal handler a chance to handle a fault.
    *
@@ -8067,7 +8039,7 @@ class V8_EXPORT V8 {
    * points to a ucontext_t structure.
    */
   static bool TryHandleSignal(int signal_number, void* info, void* context);
-#endif  // V8_OS_POSIX
+#endif  // V8_OS_LINUX && V8_TARGET_ARCH_X64 && !V8_OS_ANDROID
 
   /**
    * Enable the default signal handler rather than using one provided by the
