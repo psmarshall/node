@@ -10,7 +10,7 @@ const kOnMessageComplete = HTTPParser.kOnMessageComplete | 0;
 const CRLF = '\r\n';
 
 const bench = common.createBenchmark(main, {
-  len: [4, 8, 16, 32],
+  len: [4, 32],
   n: [1e5],
 });
 

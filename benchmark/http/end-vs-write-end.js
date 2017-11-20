@@ -11,8 +11,8 @@
 const common = require('../common.js');
 
 const bench = common.createBenchmark(main, {
-  type: ['asc', 'utf', 'buf'],
-  len: [64 * 1024, 128 * 1024, 256 * 1024, 1024 * 1024],
+  type: ['utf', 'buf'],
+  len: [64 * 1024, 256 * 1024],
   c: [100],
   method: ['write', 'end']
 });
@@ -27,9 +27,6 @@ function main(conf) {
       break;
     case 'utf':
       chunk = 'ü'.repeat(len / 2);
-      break;
-    case 'asc':
-      chunk = 'a'.repeat(len);
       break;
   }
 

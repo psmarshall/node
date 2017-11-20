@@ -11,8 +11,8 @@
 const common = require('../common.js');
 
 const bench = common.createBenchmark(main, {
-  n: [1, 4, 8, 16],
-  len: [1, 64, 256],
+  n: [1, 4, 16],
+  len: [1, 256],
   c: [100]
 });
 

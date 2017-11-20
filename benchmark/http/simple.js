@@ -5,9 +5,9 @@ const PORT = common.PORT;
 const bench = common.createBenchmark(main, {
   // unicode confuses ab on os x.
   type: ['bytes', 'buffer'],
-  len: [4, 1024, 102400],
+  len: [4, 1024],
   chunks: [1, 4],
-  c: [50, 500],
+  c: [50],
   chunkedEnc: ['true', 'false'],
   res: ['normal', 'setHeader', 'setHeaderWH']
 });

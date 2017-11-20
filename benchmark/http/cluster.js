@@ -7,8 +7,8 @@ if (cluster.isMaster) {
   var bench = common.createBenchmark(main, {
     // unicode confuses ab on os x.
     type: ['bytes', 'buffer'],
-    len: [4, 1024, 102400],
-    c: [50, 500]
+    len: [4, 1024],
+    c: [50]
   });
 } else {
   const port = parseInt(process.env.PORT || PORT);
@@ -27,7 +27,7 @@ function main(conf) {
       return;
 
     setTimeout(function() {
-      const path = `/${conf.type}/${conf.len}`;
+      const path = "/a/b";
 
       bench.http({
         path: path,
