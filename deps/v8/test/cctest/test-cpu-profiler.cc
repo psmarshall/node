@@ -1696,6 +1696,135 @@ TEST(Inlining) {
   profile->Delete();
 }
 
+static const char* inlining_test_source2 = R"(
+    %NeverOptimizeFunction(action);
+    %NeverOptimizeFunction(start);
+    level1();
+    level1();
+    %OptimizeFunctionOnNextCall(level1);
+    %OptimizeFunctionOnNextCall(level2);
+    %OptimizeFunctionOnNextCall(level3);
+    %OptimizeFunctionOnNextCall(level4);
+    level1();
+    function action(n) {
+      var s = 0;
+      for (var i = 0; i < n; ++i) s += i*i*i;
+      return s;
+    }
+    function level4() {
+      action(100);
+      return action(100);
+    }
+    function level3() {
+      const a = level4();
+      const b = level4();
+      return a + b * 1.1;
+    }
+    function level2() {
+      return level3() * 2;
+    }
+    function level1() {
+      action(1);
+      action(200);
+      action(1);
+      return level2();
+    }
+    function start(n) {
+      while (--n)
+        level1();
+    };
+  )";
+
+// The simulator builds are extremely slow. We run them with fewer iterations.
+#ifdef USE_SIMULATOR
+const double load_factor = 0.01;
+#else
+const double load_factor = 1.0;
+#endif
+
+// [Top down]:
+//     0  (root):0 0 #1
+//    13    start:34 6 #3
+//              bailed out due to 'Optimization is always disabled'
+//    19      level1:36 6 #4
+//    16        action:29 6 #14
+//                  bailed out due to 'Optimization is always disabled'
+//  2748        action:30 6 #10
+//                  bailed out due to 'Optimization is always disabled'
+//    18        action:31 6 #15
+//                  bailed out due to 'Optimization is always disabled'
+//     0        level2:32 6 #5
+//     0          level3:26 6 #6
+//    12            level4:22 6 #11
+//  1315              action:17 6 #13
+//                        bailed out due to 'Optimization is always disabled'
+//  1324              action:18 6 #12
+//                        bailed out due to 'Optimization is always disabled'
+//    16            level4:21 6 #7
+//  1268              action:17 6 #9
+//                        bailed out due to 'Optimization is always disabled'
+//  1322              action:18 6 #8
+//                        bailed out due to 'Optimization is always disabled'
+//     2    (program):0 0 #2
+TEST(Inlining2) {
+  i::FLAG_allow_natives_syntax = true;
+  v8::HandleScope scope(CcTest::isolate());
+  v8::Local<v8::Context> env = CcTest::NewContext(PROFILER_EXTENSION);
+  v8::Context::Scope context_scope(env);
+
+  CompileRun(inlining_test_source2);
+  v8::Local<v8::Function> function = GetFunction(env, "start");
+
+  v8::CpuProfiler* profiler = v8::CpuProfiler::New(CcTest::isolate());
+  v8::Local<v8::String> profile_name = v8_str("inlining");
+  profiler->StartProfiling(profile_name,
+                           v8::CpuProfilingMode::kCallerLineNumbers);
+
+  v8::Local<v8::Value> args[] = {
+      v8::Integer::New(env->GetIsolate(), 50000 * load_factor)};
+  function->Call(env, env->Global(), arraysize(args), args).ToLocalChecked();
+  v8::CpuProfile* profile = profiler->StopProfiling(profile_name);
+  CHECK(profile);
+
+  // Dump collected profile to have a better diagnostic in case of failure.
+  reinterpret_cast<i::CpuProfile*>(profile)->Print();
+
+  const v8::CpuProfileNode* root = profile->GetTopDownRoot();
+  const v8::CpuProfileNode* start_node = GetChild(env, root, "start");
+
+  NameLinePair l421_a17[] = {{"level1", 36},
+                             {"level2", 32},
+                             {"level3", 26},
+                             {"level4", 21},
+                             {"action", 17}};
+  CheckBranch(start_node, l421_a17, arraysize(l421_a17));
+  NameLinePair l422_a17[] = {{"level1", 36},
+                             {"level2", 32},
+                             {"level3", 26},
+                             {"level4", 22},
+                             {"action", 17}};
+  CheckBranch(start_node, l422_a17, arraysize(l422_a17));
+
+  NameLinePair l421_a18[] = {{"level1", 36},
+                             {"level2", 32},
+                             {"level3", 26},
+                             {"level4", 21},
+                             {"action", 18}};
+  CheckBranch(start_node, l421_a18, arraysize(l421_a18));
+  NameLinePair l422_a18[] = {{"level1", 36},
+                             {"level2", 32},
+                             {"level3", 26},
+                             {"level4", 22},
+                             {"action", 18}};
+  CheckBranch(start_node, l422_a18, arraysize(l422_a18));
+
+  NameLinePair action_direct[] = {{"level1", 36}, {"action", 30}};
+  CheckBranch(start_node, action_direct, arraysize(action_direct));
+
+  profile->Delete();
+  profiler->Dispose();
+}
+
 // [Top down]:
 //     0   (root) #0 1
 //     2    (program) #0 2
@@ -1880,7 +2009,7 @@ TEST(FunctionDetailsInlining) {
   const v8::CpuProfileNode* beta = FindChild(env, alpha, "beta");
   if (!beta) return;
   CheckFunctionDetails(env->GetIsolate(), beta, "beta", "script_b",
-                       script_b->GetUnboundScript()->GetId(), 0, 0);
+                       script_b->GetUnboundScript()->GetId(), 1, 14);
 }
 
 TEST(DontStopOnFinishedProfileDelete) {
@@ -2502,6 +2631,7 @@ TEST(SourcePositionTable) {
   int no_info = v8::CpuProfileNode::kNoLineNumberInfo;
   CHECK_EQ(no_info, info.GetSourceLineNumber(std::numeric_limits<int>::min()));
   CHECK_EQ(no_info, info.GetSourceLineNumber(0));
+  CHECK_EQ(SourcePosition::kNotInlined, info.GetInliningId(0));
   CHECK_EQ(no_info, info.GetSourceLineNumber(1));
   CHECK_EQ(no_info, info.GetSourceLineNumber(9));
   CHECK_EQ(no_info, info.GetSourceLineNumber(10));
@@ -2510,12 +2640,14 @@ TEST(SourcePositionTable) {
   CHECK_EQ(no_info, info.GetSourceLineNumber(20));
   CHECK_EQ(no_info, info.GetSourceLineNumber(21));
   CHECK_EQ(no_info, info.GetSourceLineNumber(100));
+  CHECK_EQ(SourcePosition::kNotInlined, info.GetInliningId(100));
   CHECK_EQ(no_info, info.GetSourceLineNumber(std::numeric_limits<int>::max()));
 
-  info.SetPosition(10, 1);
-  info.SetPosition(20, 2);
+  info.SetPosition(10, 1, SourcePosition::kNotInlined);
+  info.SetPosition(20, 2, SourcePosition::kNotInlined);
 
-  // The only valid return values are 1 or 2 - every pc maps to a line number.
+  // The only valid return values are 1 or 2 - every pc maps to a line
+  // number.
   CHECK_EQ(1, info.GetSourceLineNumber(std::numeric_limits<int>::min()));
   CHECK_EQ(1, info.GetSourceLineNumber(0));
   CHECK_EQ(1, info.GetSourceLineNumber(1));
@@ -2523,16 +2655,22 @@ TEST(SourcePositionTable) {
   CHECK_EQ(1, info.GetSourceLineNumber(10));
   CHECK_EQ(1, info.GetSourceLineNumber(11));
   CHECK_EQ(1, info.GetSourceLineNumber(19));
-  CHECK_EQ(2, info.GetSourceLineNumber(20));
+  CHECK_EQ(1, info.GetSourceLineNumber(20));
   CHECK_EQ(2, info.GetSourceLineNumber(21));
   CHECK_EQ(2, info.GetSourceLineNumber(100));
   CHECK_EQ(2, info.GetSourceLineNumber(std::numeric_limits<int>::max()));
 
+  CHECK_EQ(SourcePosition::kNotInlined, info.GetInliningId(0));
+  CHECK_EQ(SourcePosition::kNotInlined, info.GetInliningId(100));
+
   // Test SetPosition behavior.
-  info.SetPosition(25, 3);
+  info.SetPosition(25, 3, 0);
   CHECK_EQ(2, info.GetSourceLineNumber(21));
   CHECK_EQ(3, info.GetSourceLineNumber(100));
   CHECK_EQ(3, info.GetSourceLineNumber(std::numeric_limits<int>::max()));
+
+  CHECK_EQ(SourcePosition::kNotInlined, info.GetInliningId(21));
+  CHECK_EQ(0, info.GetInliningId(100));
 }
 
 TEST(MultipleProfilers) {
@@ -2542,6 +2680,24 @@ TEST(MultipleProfilers) {
   profiler2->StartProfiling("2");
   profiler1->StopProfiling("1");
   profiler2->StopProfiling("2");
+}
+
+// Tests that StopProfiling doesn't wait for the next sample tick in order to
+// stop, but rather exits early before a given wait threshold.
+TEST(FastStopProfiling) {
+  static const base::TimeDelta kLongInterval = base::TimeDelta::FromSeconds(10);
+  static const base::TimeDelta kWaitThreshold = base::TimeDelta::FromSeconds(5);
+
+  std::unique_ptr<CpuProfiler> profiler(new CpuProfiler(CcTest::i_isolate()));
+  profiler->set_sampling_interval(kLongInterval);
+  profiler->StartProfiling("", true);
+
+  v8::Platform* platform = v8::internal::V8::GetCurrentPlatform();
+  double start = platform->CurrentClockTimeMillis();
+  profiler->StopProfiling("");
+  double duration = platform->CurrentClockTimeMillis() - start;
+
+  CHECK_LT(duration, kWaitThreshold.InMillisecondsF());
 }
 
 }  // namespace test_cpu_profiler

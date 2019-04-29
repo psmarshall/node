@@ -99,6 +99,10 @@ void ProfilerEventsProcessor::AddCurrentStack(Isolate* isolate,
 
 void ProfilerEventsProcessor::StopSynchronously() {
   if (!base::Relaxed_AtomicExchange(&running_, 0)) return;
+  {
+    base::LockGuard<base::Mutex> guard(&running_mutex_);
+    running_cond_.NotifyOne();
+  }
   Join();
 }
 
@@ -149,6 +153,7 @@ ProfilerEventsProcessor::SampleProcessingResult
 
 
 void ProfilerEventsProcessor::Run() {
+  base::LockGuard<base::Mutex> guard(&running_mutex_);
   while (!!base::Relaxed_Load(&running_)) {
     base::TimeTicks nextSampleTime =
         base::TimeTicks::HighResolutionNow() + period_;
@@ -176,7 +181,18 @@ void ProfilerEventsProcessor::Run() {
       } else  // NOLINT
 #endif
       {
-        base::OS::Sleep(nextSampleTime - now);
+        // Allow another thread to interrupt the delay between samples in the
+        // event of profiler shutdown.
+        while (now < nextSampleTime &&
+               running_cond_.WaitFor(&running_mutex_, nextSampleTime - now)) {
+          // If true was returned, we got interrupted before the timeout
+          // elapsed. If this was not due to a change in running state, a
+          // spurious wakeup occurred (thus we should continue to wait).
+          if (!base::Relaxed_Load(&running_)) {
+            break;
+          }
+          now = base::TimeTicks::HighResolutionNow();
+        }
       }
     }
 

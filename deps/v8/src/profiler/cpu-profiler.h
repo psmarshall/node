@@ -10,6 +10,8 @@
 #include "src/allocation.h"
 #include "src/base/atomic-utils.h"
 #include "src/base/atomicops.h"
+#include "src/base/platform/condition-variable.h"
+#include "src/base/platform/mutex.h"
 #include "src/base/platform/time.h"
 #include "src/isolate.h"
 #include "src/libsampler/sampler.h"
@@ -175,9 +177,11 @@ class ProfilerEventsProcessor : public base::Thread {
   ProfileGenerator* generator_;
   std::unique_ptr<sampler::Sampler> sampler_;
   base::Atomic32 running_;
+  base::ConditionVariable running_cond_;
+  base::Mutex running_mutex_;
   const base::TimeDelta period_;  // Samples & code events processing period.
   LockedQueue<CodeEventsContainer> events_buffer_;
-  static const size_t kTickSampleBufferSize = 1 * MB;
+  static const size_t kTickSampleBufferSize = 512 * KB;
   static const size_t kTickSampleQueueLength =
       kTickSampleBufferSize / sizeof(TickSampleEventRecord);
   SamplingCircularQueue<TickSampleEventRecord,
